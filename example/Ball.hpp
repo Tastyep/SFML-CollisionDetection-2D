@@ -1,24 +1,39 @@
-#ifndef POLYGON_INTERSECTION_CALCULATOR_BALL_HPP
-#define POLYGON_INTERSECTION_CALCULATOR_BALL_HPP
+#ifndef COLLISION_DETECTION_BALL_HPP
+#define COLLISION_DETECTION_BALL_HPP
 
 #include <cmath>
 #include <utility>
 #include <vector>
 
 #include <SFML/Graphics/Drawable.hpp>
-#include <SFML/Graphics/VertexArray.hpp>
 #include <SFML/System/Vector2.hpp>
+
+#include "Polygon.hpp"
 
 class Ball : public sf::Drawable {
  public:
-  Ball(sf::VertexArray vertices)
-    : _vertices(std::move(vertices)) {}
+  Ball(std::vector<sf::Vector2f> vertices)
+    : _polygon(std::move(vertices)) {}
+
+  const CollisionDetection::Polygon& body() const {
+    return _polygon;
+  };
 
   void draw(sf::RenderTarget& target, sf::RenderStates) const override {
-    target.draw(_vertices);
+    target.draw(_polygon);
   }
 
-  void update() {}
+  void move() {
+    _polygon.move(_direction * speed);
+  }
+
+  void move(float distance) {
+    _polygon.move(_direction * distance);
+  }
+
+  void refresh() {
+    _polygon.refresh();
+  }
 
   void setDirection(const sf::Vector2f& direction) {
     _direction = direction;
@@ -28,8 +43,7 @@ class Ball : public sf::Drawable {
   }
 
  private:
-  std::vector<sf::Vector2i> _polygon;
-  sf::VertexArray _vertices;
+  CollisionDetection::Polygon _polygon;
   sf::Vector2f _direction{ 0, 1 };
   float speed{ 10 };
 };
