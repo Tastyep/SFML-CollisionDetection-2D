@@ -1,6 +1,6 @@
 #include <chrono>
 #include <cmath>
-#include <iostream>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -9,6 +9,7 @@
 #include <SFML/Window/Event.hpp>
 
 #include "Ball.hpp"
+#include "CollisionTester.hpp"
 
 using namespace std::literals::chrono_literals;
 
@@ -47,7 +48,9 @@ class Window {
       for (const auto& obj : _objects) {
         _window.draw(obj);
       }
-      _window.draw(*_ball);
+      for (const auto& ball : _balls) {
+        _window.draw(ball);
+      }
       _window.display();
     }
   }
@@ -57,38 +60,91 @@ class Window {
   }
 
   void updatePhysic() {
-    _ball->update();
+    for (auto& ball : _balls) {
+      CollisionDetection::IntersectionData inter;
+      bool interDetected = false;
+
+      ball.move();
+      for (const auto& obj : _objects) {
+        std::tie(interDetected, inter) = _collisionTester.test(ball.body(), obj);
+        if (interDetected) {
+          break;
+        }
+      }
+      if (!interDetected) {
+        for (const auto& obj : _balls) {
+          if (&obj == &ball) {
+            continue;
+          }
+          std::tie(interDetected, inter) = _collisionTester.test(ball.body(), obj.body());
+          if (interDetected) {
+            break;
+          }
+        }
+      }
+
+      // V’ = V – (2 * (V . N)) * N
+      if (interDetected) {
+        ball.move(-inter.distance);
+
+        auto ballDirection = ball.direction();
+        float dot = ballDirection.x * inter.normal.x + ballDirection.y * inter.normal.y;
+
+        inter.normal *= (2.f * dot);
+        ball.setDirection(ballDirection - inter.normal);
+      }
+      ball.refresh();
+    }
   }
 
   void buildRoom() {
-    _objects.push_back(this->makeCyclicPolygon({ 500, 500 }, 490, 10));
-    _objects.push_back(this->makeCyclicPolygon({ 300, 300 }, 50, 8));
-    _objects.push_back(this->makeCyclicPolygon({ 600, 800 }, 50, 4));
-    _objects.push_back(this->makeCyclicPolygon({ 500, 500 }, 40, 6));
-    _objects.push_back(this->makeCyclicPolygon({ 800, 300 }, 80, 3));
-    _objects.push_back(this->makeCyclicPolygon({ 300, 700 }, 80, 3));
-    _objects.push_back(this->makeCyclicPolygon({ 800, 600 }, 80, 30));
+    _objects.emplace_back(this->makeRectangle({ 50, 50 }, 900, 10));
+    _objects.emplace_back(this->makeRectangle({ 50, 50 }, 10, 900));
+    _objects.emplace_back(this->makeRectangle({ 950, 950 }, -10, -900));
+    _objects.emplace_back(this->makeRectangle({ 950, 950 }, -900, -10));
 
-    _ball = std::make_unique<Ball>(this->makeCyclicPolygon({ 500, 150 }, 20, 20));
+    _objects.emplace_back(this->makeCyclicPolygon({ 300, 300 }, 50, 8));
+    _objects.emplace_back(this->makeCyclicPolygon({ 600, 800 }, 50, 4));
+    _objects.emplace_back(this->makeCyclicPolygon({ 500, 500 }, 40, 6));
+    _objects.emplace_back(this->makeCyclicPolygon({ 800, 300 }, 80, 3));
+    _objects.emplace_back(this->makeCyclicPolygon({ 300, 700 }, 80, 3));
+    _objects.emplace_back(this->makeCyclicPolygon({ 800, 600 }, 80, 30));
+
+    _balls.emplace_back(this->makeCyclicPolygon({ 400, 150 }, 40, 20));
+    _balls.emplace_back(this->makeCyclicPolygon({ 500, 250 }, 20, 20));
+    _balls.emplace_back(this->makeCyclicPolygon({ 200, 250 }, 20, 20));
+    _balls.emplace_back(this->makeCyclicPolygon({ 700, 250 }, 20, 20));
+    _balls.emplace_back(this->makeCyclicPolygon({ 200, 250 }, 20, 20));
+    _balls.emplace_back(this->makeCyclicPolygon({ 700, 250 }, 20, 20));
   }
 
-  sf::VertexArray makeCyclicPolygon(const sf::Vector2f& center, float radius, size_t nbVertices) const {
-    sf::VertexArray polygon(sf::PrimitiveType::LineStrip, 0);
+  std::vector<sf::Vector2f> makeCyclicPolygon(const sf::Vector2f& center, float radius, size_t nbVertices) const {
+    std::vector<sf::Vector2f> polygon;
     float angle = 360.f / nbVertices;
 
-    for (size_t i = 0; i < nbVertices + 1; ++i) {
+    for (size_t i = 0; i < nbVertices; ++i) {
       float angleRad = (angle * i * M_PI) / 180.f;
-      polygon.append(
-        sf::Vertex(sf::Vector2f(center.x + radius * std::cos(angleRad), center.y + radius * std::sin(angleRad)),
-                   sf::Color::Black));
+      polygon.emplace_back(center.x + radius * std::cos(angleRad), center.y + radius * std::sin(angleRad));
     }
 
     return polygon;
   }
 
+  std::vector<sf::Vector2f> makeRectangle(const sf::Vector2f& tl, int width, int height) const {
+    std::vector<sf::Vector2f> polygon;
+
+    polygon.push_back(tl);
+    polygon.emplace_back(tl.x, tl.y + height);
+    polygon.emplace_back(tl.x + width, tl.y + height);
+    polygon.emplace_back(tl.x + width, tl.y);
+
+    return polygon;
+  }
+
  private:
-  std::vector<sf::VertexArray> _objects;
-  std::unique_ptr<Ball> _ball;
+  std::vector<CollisionDetection::Polygon> _objects;
+  std::vector<Ball> _balls;
+  CollisionDetection::CollisionTester _collisionTester;
 
  private:
   sf::RenderWindow _window;
